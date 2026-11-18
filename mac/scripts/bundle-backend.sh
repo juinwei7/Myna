@@ -71,9 +71,16 @@ rm -rf "$BACKEND/include" "$BACKEND/share" "$LIBDIR/config-"* "$LIBDIR/lib2to3" 
 find "$BACKEND" -type d \( -name test -o -name tests \) -prune -exec rm -rf {} + 2>/dev/null || true
 fi
 
-# 整包先編成 .pyc：執行時才產生會寫進已簽章的 bundle，破壞封印
+# 套件裝的命令列工具（mlx_audio.tts.generate 之類）第一行寫死這台電腦的路徑，搬進 app 後本來就不能跑，app 也用不到
+find "$BACKEND/bin" \( -type f -o -type l \) ! -name 'python*' -delete
+
+# 整包先編成 .pyc：執行時才產生會寫進已簽章的 bundle，破壞封印。
+# -s／-p 把記在 .pyc 裡的原始碼路徑換成 /backend/…，不把建置這台電腦的路徑帶進安裝檔
 say "預先編譯 .pyc"
-"$PY" -m compileall -q -j 0 "$BACKEND/lib" "$BACKEND/studio" >/dev/null 2>&1 || true
+if [ "$PRUNE" = 1 ]; then
+    "$PY" -m compileall -q -j 0 -f -s "$BACKEND" -p /backend "$BACKEND/lib" >/dev/null 2>&1 || true
+fi
+"$PY" -m compileall -q -f -s "$BACKEND" -p /backend "$BACKEND/studio" >/dev/null 2>&1 || true
 
 say "匯入驗證"
 "$PY" -I -c "import mlx.core, mlx_audio.tts.utils, fastapi, uvicorn, mcp.server.mcpserver; print('  依賴 OK')" \
