@@ -1,0 +1,1 @@
+{"defaults":{"clone":"qwen3-1.7b-base","preset":"qwen3-1.7b-custom","design":"qwen3-1.7b-design"},"default_voice":null,"memory_budget_gb":16.0,"memory_budget_range":[4.0,40.0]}
