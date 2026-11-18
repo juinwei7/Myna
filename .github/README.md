@@ -11,6 +11,7 @@ The interface is in Traditional Chinese only for now. Scripts can be Chinese, En
 - Speech is generated on your Mac. Scripts, recordings and audio files are never uploaded
 - A catalog of 8 open-source speech models. You choose which to download
 - Send one script to several models at once and compare the results side by side
+- Long scripts start playing as soon as the first paragraph is ready
 - No Python install needed. The app bundles its own
 - Requires Apple Silicon and macOS 14 or later (developed and tested on macOS 27)
 
@@ -18,7 +19,7 @@ The interface is in Traditional Chinese only for now. Scripts can be Chinese, En
 
 ## Models
 
-Models are not bundled. You download them from the Models page; they live in the Hugging Face cache. I tested each one with the same Chinese sentence, transcribed the result back with a speech recognizer, and counted wrong characters.
+Models are not bundled. You download them from the Models page; they live in the Hugging Face cache. I tested each one with the same Chinese sentence, transcribed the result back with a speech recognizer, and counted wrong characters. You can [listen to each model on the website](https://myna.weibuilds.com/#samples).
 
 | Model | Modes | Size | License | Error rate | Notes |
 |---|---|---|---|---|---|
@@ -46,6 +47,12 @@ claude mcp add --transport http myna http://localhost:8790/mcp
 ```
 
 The address is bound to `127.0.0.1` and is reachable only from this Mac.
+
+`synthesize` returns an audio file. `speak` plays the text out loud on this Mac, for example when you tell Claude to let you know once a task is done. Several calls in a row are played one after another. You can turn this off in Settings → AI tools. Scripts that don't use MCP can call it with `curl`:
+
+```bash
+curl -X POST http://localhost:8790/api/speak -H 'Content-Type: application/json' -d '{"text": "Deploy finished"}'
+```
 
 ## Install
 

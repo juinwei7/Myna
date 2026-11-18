@@ -63,7 +63,7 @@ repo 是 `github.com/juinwei7/Myna`。網址和 repo 名稱各只寫在一個地
 2. 產生頁的截圖
 3. 寫稿子，選聲音，按一下
 4. 用你自己的聲音唸（聲音庫的截圖；仿聲的提醒）
-5. 同一份稿子，換個模型再聽一次（音檔詳情的截圖）
+5. 同一份稿子，換個模型再聽一次（音檔詳情的截圖；下面接試聽：同一句話 8 個模型各唸一次）
 6. 8 個模型，要用哪個自己挑（模型頁的截圖、模型的表）
 7. 稿子和聲音都留在你的 Mac（留在 Mac／會連網的時候，兩欄）
 8. 讓 Claude 幫你唸（MCP 的指令）
@@ -83,13 +83,23 @@ repo 是 `github.com/juinwei7/Myna`。網址和 repo 名稱各只寫在一個地
   - `site/public/`：favicon、分享預覽圖、截圖的 AVIF、`_headers`，原樣複製
   - `site/serve.mjs`：本機預覽（http://localhost:4322/）
   - `site/make-images.sh`：把 `docs/images` 的截圖轉成 AVIF、產生 favicon、用 `site/og.html` 截分享預覽圖
+  - `site/make-samples.py`：對測試用的語音服務產生試聽的音檔，放進 `site/public/audio/`
+  - `site/src/pages.test.mjs`：頁面的檢查（`node --test site/src/pages.test.mjs`），部署前會跑
+- 試聽（`site/public/audio/<模型代號>.m4a`，AAC 單聲道 64 kbps）：
+  - 要用真的模型才做得出來，所以音檔放進 git；少一個建置就會失敗。
+  - 不用真人的聲音：聲音描述、內建配音員，或是拿聲音描述的成品當參考錄音去仿。每一段怎麼做的寫在頁面上。
+  - 用瀏覽器自己的播放器（`<audio controls preload="none">`），按了才抓檔案。
+  - 句子挑日常的話。試過車站廣播那種句子，好幾個模型會唸錯「列車」「間隙」；產品名「九官鳥」則是語音辨識認不得，沒辦法檢查。
+  - 模型每次產生的結果不太一樣。做完用 `python3 site/make-samples.py --check` 轉回文字檢查，唸錯的用 `--only` 重做。
+- 文案跟著版本走：網站在推上 main 時就會部署，所以新功能的句子寫成 `{ since: '2.1.0', text: '…' }`，
+  最新發布的版本到了才會放上去。
 - 截圖只有一份來源，是 README 用的 `docs/images`。網頁優先用 AVIF（原寬和 960 寬兩種，品質 60），PNG 當備援。
   截圖的長寬要是偶數、而且縮到 960 寬時高也要是偶數（1920×1168 可以），不然 `sips` 轉出來的 AVIF 在 Safari、Firefox 是空白的。
 - 截圖用示範資料拍，不用真的稿子和聲音。
 - 發布說明的格式（tag 的說明會變成 Release 的內文）：第一行「九官鳥 X.Y.Z：副標」，接著一行一條、用「- 」開頭；
   空一行之後可以放英文段，網站只讀中文那一段。
 - SEO：標題、說明、canonical、`sitemap.xml`、`robots.txt`、`llms.txt`、Open Graph（1200×630）、SoftwareApplication 的結構化資料。
-- `_headers`：`nosniff`、Referrer-Policy、CSP（不允許任何 script）、圖片快取一天。
+- `_headers`：`nosniff`、Referrer-Policy、CSP（不允許任何 script；圖片與音檔只能是同一個網站的）、圖片與音檔快取一天。
 
 ## 6. 部署
 
