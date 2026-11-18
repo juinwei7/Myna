@@ -16,6 +16,8 @@ HISTORY = OUT / "history.jsonl"
 PRONOUNCE = ROOT / "pronounce.txt"
 SETTINGS = ROOT / "settings.json"
 SCRIPT = ROOT / "script.txt"
+# 產生途中先做好的段落（邊產生邊播用），暫存：服務啟動時清空
+PARTS = ROOT / "parts"
 HERE = Path(__file__).parent
 
 PORT = int(os.environ.get("VOICE_STUDIO_PORT", "8790"))
@@ -28,6 +30,8 @@ FFMPEG = shutil.which("ffmpeg") or next(
 MAX_CHARS = 5000
 # MCP 的呼叫端（或中間的閘道）常見的逾時是 20～30 秒；最多等 15 秒，沒做完就回 job_id 讓對方再查
 MCP_WAIT_SECONDS = 15
+# 工作結束後分段成品再留多久（秒）：app 換成完整音檔之前可能還在播最後幾段
+PARTS_KEEP_SECONDS = 3600
 
 # 測試用：換成假模型與假下載程式，不載入 MLX
 FAKE_ENGINE = os.environ.get("VOICE_STUDIO_FAKE") == "1"

@@ -86,8 +86,13 @@ def memory_budget_gb():
         return DEFAULT_BUDGET_GB
 
 
+def allow_speak():
+    """AI 工具能不能讓九官鳥直接播出聲音（speak）。預設可以；使用者在設定裡關得掉。"""
+    return _read().get("allow_speak", True) is not False
+
+
 def view():
-    return {"defaults": defaults(), "default_voice": default_voice(),
+    return {"defaults": defaults(), "default_voice": default_voice(), "allow_speak": allow_speak(),
             "memory_budget_gb": memory_budget_gb(), "memory_budget_range": list(BUDGET_RANGE)}
 
 
@@ -109,6 +114,10 @@ def update(payload):
             name = payload["default_voice"]
             # 空字串或 null 代表不指定（用聲音庫的第一個）
             data["default_voice"] = voices.get(name)["name"] if name else None
+        if "allow_speak" in payload:
+            if not isinstance(payload["allow_speak"], bool):
+                raise ValueError("allow_speak 要是 true 或 false")
+            data["allow_speak"] = payload["allow_speak"]
         if "memory_budget_gb" in payload:
             try:
                 budget = float(payload["memory_budget_gb"])

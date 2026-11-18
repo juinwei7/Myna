@@ -158,6 +158,38 @@ class ApiTests(unittest.TestCase):
         call("DELETE", f"/api/jobs/{job['job_id']}")
         self.assertEqual(poll(job["job_id"])["status"], "cancelled")
 
+    def test_speak(self):
+        """Spec 003 驗收 B1～B3、B6。"""
+        code, job = call("POST", "/api/speak", {"text": "部署完成"})
+        self.assertEqual((code, job["speak"]), (200, True))
+        done = poll(job["job_id"])
+        self.assertEqual((done["status"], done["speak"]), ("done", True))
+        self.assertIn(done["id"], [r["id"] for r in call("GET", "/api/history")[1]["items"]])
+        self.assertEqual(call("POST", "/api/speak", {"text": "  "})[0], 400)
+        self.assertEqual(call("POST", "/api/speak", {"text": "你好", "voice": "preset:Vivian",
+                                                     "model": "omnivoice"})[0], 400)
+
+        self.assertIs(call("GET", "/api/settings")[1]["allow_speak"], True)
+        self.assertEqual(call("PUT", "/api/settings", {"allow_speak": "no"})[0], 400)
+        self.assertIs(call("PUT", "/api/settings", {"allow_speak": False})[1]["allow_speak"], False)
+        try:
+            code, err = call("POST", "/api/speak", {"text": "部署完成"})
+            self.assertEqual(code, 400)
+            self.assertIn("synthesize", err["detail"])
+            code, job = call("POST", "/api/jobs", {"text": "照常產生", "voice": "clone:tw-female"})
+            self.assertEqual((code, job["speak"]), (200, False))
+            res = self._mcp("tools/call", {"name": "speak", "arguments": {"text": "你好"}})
+            self.assertTrue(res.get("isError"), res)
+        finally:
+            call("PUT", "/api/settings", {"allow_speak": True})
+
+    def test_parts_over_rest(self):
+        """Spec 003 驗收 A7：分段成品的欄位從 REST 看得到。"""
+        _, job = call("POST", "/api/jobs", {"text": "第一段\n第二段\n第三段", "voice": "clone:tw-female"})
+        done = poll(job["job_id"])
+        self.assertEqual((done["status"], done["parts"], done["segments"]), ("done", 3, 3))
+        self.assertTrue((Path(done["parts_dir"]) / "0003.wav").exists())
+
     def _mcp(self, method, params=None):
         body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}}
         code, data = call("POST", "/mcp", body, {"Accept": "application/json, text/event-stream"})
@@ -178,6 +210,22 @@ class ApiTests(unittest.TestCase):
         ids = {m["id"] for m in listed["result"]}
         self.assertIn("omnivoice", ids)
         self.assertNotIn("voxcpm2", ids)
+
+    def test_mcp_speak(self):
+        """Spec 003 驗收 B4、B5。"""
+        tools = {t["name"]: t for t in self._mcp("tools/list")["tools"]}
+        self.assertIn("speak", tools)
+        self.assertEqual(set(tools["speak"]["inputSchema"]["properties"]),
+                         set(tools["synthesize"]["inputSchema"]["properties"]))
+        start = time.time()
+        res = self._mcp("tools/call", {"name": "speak", "arguments": {"text": "測試都過了，可以合併。"}})
+        self.assertLess(time.time() - start, 2)
+        self.assertFalse(res.get("isError"), res)
+        out = res["structuredContent"]
+        self.assertTrue(out["speak"])
+        self.assertEqual(poll(out["job_id"])["status"], "done")
+        res = self._mcp("tools/call", {"name": "synthesize", "arguments": {"text": "你好"}})
+        self.assertFalse(res["structuredContent"]["speak"])
 
 
 if __name__ == "__main__":

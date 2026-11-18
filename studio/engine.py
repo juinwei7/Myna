@@ -4,11 +4,13 @@
 """
 import gc
 import subprocess
+import tempfile
 import threading
 import uuid
 import wave
 from collections import OrderedDict
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 
@@ -109,11 +111,17 @@ class Engine:
             self._ref_cache[key] = load_audio(path, sample_rate=sample_rate)
         return self._ref_cache[key]
 
-    def synth(self, r, on_progress=lambda fraction, stage: None, cancelled=lambda: False):
+    def synth(self, r, on_progress=lambda fraction, stage: None, cancelled=lambda: False, on_part=None):
+        """產生一筆音檔。稿子有兩段以上時，每做好一段就呼叫 `on_part(第幾段, 總段數, 聲音, 取樣率)`：
+        那一段已經含段後的停頓與語速，所以各段接起來就是成品，可以先拿去播。"""
         spoken = text.apply_pronounce(r.text)
         segs = text.segments(spoken)
         if not segs:
             raise ValueError("文字不可以是空的")
+
+        tempo = r.speed if abs(r.speed - 1.0) > 0.01 and not r.spec.native_speed else None
+        if tempo and not config.FFMPEG:  # 先講，不要讓人等到做完才知道
+            raise ValueError("這個模型調語速需要 ffmpeg（brew install ffmpeg），或把語速設回 1.0、改用 OmniVoice")
 
         on_progress(0.0, f"載入 {r.spec.name}…")
         model = self.get(r.spec)
@@ -129,9 +137,15 @@ class Engine:
             results = list(model.generate(text=seg.text, **kwargs))
             if not results:
                 raise RuntimeError(f"{r.spec.name} 沒有產出聲音（第 {i + 1} 段）")
-            pieces.extend(np.array(x.audio).astype(np.float32).reshape(-1) for x in results)
+            chunks = [np.array(x.audio).astype(np.float32).reshape(-1) for x in results]
             if seg.pause_after:
-                pieces.append(np.zeros(int(sr * seg.pause_after), dtype=np.float32))
+                chunks.append(np.zeros(int(sr * seg.pause_after), dtype=np.float32))
+            piece = np.concatenate(chunks)
+            if tempo:
+                piece = _change_speed(piece, sr, tempo)
+            if on_part and len(segs) > 1:
+                on_part(i, len(segs), piece, sr)
+            pieces.append(piece)
         if cancelled():
             raise Cancelled()
         audio = np.concatenate(pieces)
@@ -140,9 +154,7 @@ class Engine:
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         tag = f"{r.spec.id}-{r.voice.replace(':', '-')}".replace("/", "-")
         path = config.OUT / f"{stamp}-{tag}-{uuid.uuid4().hex[:4]}.wav"
-        _write_wav(path, audio, sr)
-        if abs(r.speed - 1.0) > 0.01 and not r.spec.native_speed:
-            _change_speed(path, r.speed)
+        write_wav(path, audio, sr)
 
         record = {
             "id": path.stem,
@@ -165,13 +177,18 @@ class Engine:
         return history.get(record["id"])
 
 
-def _write_wav(path, audio, sample_rate):
+def write_wav(path, audio, sample_rate):
     pcm = (np.clip(audio, -1.0, 1.0) * 32767).astype("<i2")
     with wave.open(str(path), "wb") as w:
         w.setnchannels(1)
         w.setsampwidth(2)
         w.setframerate(sample_rate)
         w.writeframes(pcm.tobytes())
+
+
+def _read_wav(path):
+    with wave.open(str(path)) as w:
+        return np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").astype(np.float32) / 32767
 
 
 def _duration(path):
@@ -182,11 +199,12 @@ def _duration(path):
         return 0.0
 
 
-def _change_speed(path, speed):
-    if not config.FFMPEG:
-        path.unlink(missing_ok=True)
-        raise ValueError("這個模型調語速需要 ffmpeg（brew install ffmpeg），或把語速設回 1.0、改用 OmniVoice")
-    tmp = path.with_suffix(".tmp.wav")
-    subprocess.run([config.FFMPEG, "-loglevel", "error", "-y", "-i", str(path),
-                    "-af", f"atempo={max(0.5, min(2.0, speed))}", str(tmp)], check=True)
-    tmp.replace(path)
+def _change_speed(audio, sample_rate, speed):
+    """變速不變調（ffmpeg atempo）。一段一段做，先做好的段落才能先拿去播。"""
+    with tempfile.TemporaryDirectory(prefix="myna-tempo-") as tmp:
+        src, dst = Path(tmp) / "in.wav", Path(tmp) / "out.wav"
+        write_wav(src, audio, sample_rate)
+        subprocess.run([config.FFMPEG, "-loglevel", "error", "-y", "-i", str(src),
+                        "-af", f"atempo={max(0.5, min(2.0, speed))}",
+                        "-ar", str(sample_rate), "-ac", "1", "-c:a", "pcm_s16le", str(dst)], check=True)
+        return _read_wav(dst)

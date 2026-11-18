@@ -28,7 +28,7 @@ from mcp.server.mcpserver import MCPServer
 from . import catalog, config, history, models, settings, text, voices
 from .engine import Engine
 from .jobs import Jobs
-from .resolve import resolve_batch
+from .resolve import resolve, resolve_batch
 
 config.ensure_dirs()
 engine = Engine()
@@ -71,6 +71,13 @@ def legacy_voices():
 
 def submit(payload):
     return jobs.submit(resolve_batch(payload))
+
+
+def speak_now(payload):
+    """排一筆「做好就直接播」的工作。播放是 app 的事：它在佇列裡看到 speak 的工作就會播。"""
+    if not settings.allow_speak():
+        raise ValueError("使用者在九官鳥的設定裡關掉了「讓 AI 工具直接唸出來」。要音檔的話改用 synthesize。")
+    return jobs.submit([resolve(payload)], speak=True)[0]
 
 
 def _shared_extra_repos(spec):
@@ -130,6 +137,7 @@ mcp = MCPServer(
         "本機語音產生（多模型：Qwen3-TTS、Breeze-TTS 2、VoxCPM2、OmniVoice…）。"
         "先 list_voices 挑聲音，需要時用 list_models 看有哪些模型，"
         "再 synthesize；超過約 15 秒會先回 job_id，用 get_job 取結果。"
+        "要讓使用者當場聽到（例如做完事通知一聲）用 speak，它會直接從這台 Mac 播出來。"
         "要商用的成品不要用 commercial=false 的模型。"
     ),
 )
@@ -173,6 +181,19 @@ async def synthesize(text: str, voice: str | None = None, model: str | None = No
     """
     job = submit({"text": text, "voice": voice, "model": model, "instruct": instruct, "speed": speed})[0]
     return await _wait(job)
+
+
+@mcp.tool()
+def speak(text: str, voice: str | None = None, model: str | None = None,
+          instruct: str | None = None, speed: float = 1.0) -> dict[str, Any]:
+    """把文字直接從這台 Mac 唸出來給使用者聽（例如做完事通知一聲、把一段話唸給他聽）。
+
+    參數跟 synthesize 一樣。送出就回傳 job_id，不等唸完；稿子有好幾段時，第一段做好就開始播。
+    連續呼叫會排隊，後面的不會打斷前面的。唸過的內容也會留在九官鳥的「音檔」。
+    只需要音檔、不需要當場播的時候用 synthesize。使用者關掉這個功能時會回錯誤。
+    """
+    job = speak_now({"text": text, "voice": voice, "model": model, "instruct": instruct, "speed": speed})
+    return {**job.view(), "note": "已經排進九官鳥，做好就會播出來"}
 
 
 @mcp.tool(name="get_job")
@@ -366,6 +387,14 @@ def api_submit(payload: dict):
     views = [j.view() for j in created]
     # 單筆維持舊格式（直接回傳工作）；批次多一個 jobs 陣列
     return {**views[0], "jobs": views} if len(views) > 1 else views[0]
+
+
+@app.post("/api/speak")
+def api_speak(payload: dict):
+    try:
+        return speak_now(payload).view()
+    except ValueError as e:
+        _bad(e)
 
 
 @app.get("/api/jobs")
