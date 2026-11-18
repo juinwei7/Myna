@@ -1,0 +1,3 @@
+import VoiceStudioCore
+
+VoiceStudioApp.main()

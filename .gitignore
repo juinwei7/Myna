@@ -1,0 +1,33 @@
+# 個人資料與最早的命令列工具：只留在本機
+legacy/
+
+# 聲音、音檔、設定一律放 VOICE_STUDIO_HOME（~/Library/Application Support/VoiceStudio），這裡保險起見再擋一次
+*.wav
+*.m4a
+*.mp3
+voices/
+out/
+settings.json
+pronounce.txt
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Swift 與 app 的建置產物
+.build/
+.swiftpm/
+build/
+dist/
+mac/Resources/VoiceStudio.icns
+
+# 官網的建置產物
+site/dist/
+
+.DS_Store
+
+# 給 AI 的專案說明、Claude Code 的本機設定：只留在本地，不推
+CLAUDE.md
+.claude/
