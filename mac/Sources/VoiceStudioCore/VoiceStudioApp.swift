@@ -50,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyLaunchOptions()
         Task { @MainActor in
             let model = StudioModel.shared
+            model.player.muted = UserDefaults.standard.bool(forKey: "mute")
             await model.boot()
             if UserDefaults.standard.bool(forKey: "playLatest"), let first = model.history.first {
                 model.player.muted = true
@@ -62,7 +63,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// 截圖驗收用的啟動參數：`-appearance light|dark` 固定外觀、`-openSettings YES` 直接開偏好設定、
-    /// `-playLatest YES` 靜音播放最新一筆（讓播放列出現）、`-detail <代號>` 直接打開那筆音檔的詳情。
+    /// `-playLatest YES` 靜音播放最新一筆（讓播放列出現）、`-detail <代號>` 直接打開那筆音檔的詳情、
+    /// `-mute YES` 整個 app 靜音（驗收邊產生邊播時不吵到人）。
     private func applyLaunchOptions() {
         let args = UserDefaults.standard
         switch args.string(forKey: "appearance") {
@@ -190,6 +192,9 @@ struct MenuBarContent: View {
         }
         if !model.activeJobs.isEmpty {
             Button("取消所有工作") { model.cancelAll() }
+        }
+        if !model.player.isIdle {
+            Button("停止播放") { model.stopPlayback() }
         }
         Divider()
         Button("結束九官鳥") { NSApp.terminate(nil) }

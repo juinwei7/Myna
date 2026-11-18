@@ -165,4 +165,94 @@ final class LiveModelTests: XCTestCase {
         await model.unload(moss)
         XCTAssertFalse(try XCTUnwrap(model.models.first { $0.id == moss.id }).loaded)
     }
+
+    // MARK: Spec 003 — 邊產生邊播、AI 工具直接唸出來（驗收 C5～C8）
+
+    private func speak(_ text: String) async throws -> (code: Int, body: [String: Any]) {
+        var req = URLRequest(url: model.supervisor.baseURL.appending(path: "api/speak"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["text": text, "model": "omnivoice"])
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        let body = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+        return ((resp as? HTTPURLResponse)?.statusCode ?? 0, body)
+    }
+
+    private let longScript = (1...6).map { "這是第 \($0) 段，用來確認稿子還沒整份做完的時候，前面做好的段落就已經開始播了。" }
+        .joined(separator: "\n")
+
+    func testLivePlaybackStartsBeforeJobFinishes() async throws {
+        let before = Set(model.history.map(\.id))
+        model.text = longScript
+        model.mode = .clone
+        model.modelChoice["clone"] = "omnivoice"
+        model.compareOn = false
+        model.player.rate = 2
+        await model.generate()
+        XCTAssertFalse(model.statusIsError, model.status)
+
+        try await wait("邊產生邊播") { model.player.live != nil }
+        XCTAssertEqual(model.activeJobs.count, 1, "開始播的時候，工作還在產生")
+        XCTAssertTrue(model.player.isPlaying)
+        XCTAssertEqual(model.player.live?.total, 6)
+        XCTAssertTrue(model.history.allSatisfy { before.contains($0.id) }, "完整的音檔還沒出現")
+
+        try await wait("換成完整的音檔", timeout: 180) { model.player.live == nil && model.player.current != nil }
+        let item = try XCTUnwrap(model.history.first { !before.contains($0.id) })
+        XCTAssertEqual(model.player.current?.id, item.id)
+        XCTAssertEqual(model.selection, [item.id])
+        XCTAssertEqual(model.player.duration, item.seconds, accuracy: 0.2)
+        XCTAssertGreaterThan(model.player.position, 1, "接在已經播過的位置，不是從頭")
+        try await wait("波形") { !model.player.peaks.isEmpty }
+    }
+
+    func testCancelStopsLivePlayback() async throws {
+        let before = model.history.count
+        model.text = longScript
+        model.mode = .clone
+        model.modelChoice["clone"] = "omnivoice"
+        model.compareOn = false
+        await model.generate()
+        try await wait("邊產生邊播") { model.player.live != nil }
+        model.cancelAll()
+        try await wait("播放停止") { model.player.current == nil && model.activeJobs.isEmpty }
+        XCTAssertFalse(model.player.isPlaying)
+        XCTAssertEqual(model.history.count, before, "取消的工作不留紀錄")
+    }
+
+    func testSpeakPlaysTwoInOrder() async throws {
+        model.player.rate = 2
+        let a = try await speak("第一句：測試都通過了。")
+        let b = try await speak("第二句：可以合併了。")
+        XCTAssertEqual([a.code, b.code], [200, 200])
+        XCTAssertEqual(a.body["speak"] as? Bool, true)
+
+        // 記下播放器依序播了什麼，以及每一句有沒有播到最後
+        var order: [String] = []
+        var finished = Set<String>()
+        let deadline = Date().addingTimeInterval(120)
+        while finished.count < 2, Date() < deadline {
+            if let title = model.player.current?.title, title.contains("句：") {
+                if order.last != title { order.append(title) }
+                if !model.player.isPlaying, model.player.duration > 0,
+                   model.player.position >= model.player.duration - 0.05 { finished.insert(title) }
+            }
+            try await Task.sleep(for: .milliseconds(40))
+        }
+        XCTAssertEqual(order, ["第一句：測試都通過了。", "第二句：可以合併了。"])
+        XCTAssertEqual(finished.count, 2, "兩句都要播完，第二句不能打斷第一句")
+        XCTAssertTrue(model.history.contains { $0.text == "第二句：可以合併了。" }, "唸過的留在音檔裡")
+    }
+
+    func testSpeakRespectsSwitch() async throws {
+        await model.setAllowSpeak(false)
+        XCTAssertEqual(model.settings?.allowSpeak, false)
+        let refused = try await speak("這句不該出聲。")
+        await model.setAllowSpeak(true)
+        XCTAssertEqual(refused.code, 400)
+        XCTAssertTrue((refused.body["detail"] as? String ?? "").contains("synthesize"))
+        try await Task.sleep(for: .seconds(2))
+        XCTAssertFalse(model.history.contains { $0.text == "這句不該出聲。" })
+        XCTAssertEqual(model.settings?.allowSpeak, true)
+    }
 }

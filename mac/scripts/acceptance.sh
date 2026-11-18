@@ -48,6 +48,8 @@ MCP_TOOLS=$(curl -s -m 5 -X POST "http://127.0.0.1:$PORT/mcp" -H "Content-Type: 
     -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
     | /usr/bin/python3 -c "import sys,json; print(' '.join(sorted(t['name'] for t in json.load(sys.stdin)['result']['tools'])))" 2>/dev/null)
 check "C2 MCP 有回應且含 synthesize、list_models" 'echo "$MCP_TOOLS" | grep -q synthesize && echo "$MCP_TOOLS" | grep -q list_models'
+check "C2 MCP 有 speak（Spec 003）" 'echo "$MCP_TOOLS" | grep -qw speak'
+check "C2 設定有 allow_speak（Spec 003）" 'curl -s -m 3 "http://127.0.0.1:$PORT/api/settings" | grep -q "\"allow_speak\":true"'
 BACKEND_PID="$(backend_pid)"
 check "C2 後端是 app 內附的那一份" 'ps -p "$BACKEND_PID" -o command= | grep -q "$PWD/$APP/Contents/Resources/backend"'
 

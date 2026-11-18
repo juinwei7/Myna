@@ -224,4 +224,80 @@ final class LogicTests: XCTestCase {
         let done = try StudioClient.decoder.decode(Batch.self, from: try fixture("jobs-done")).jobs
         XCTAssertNotNil(done.first { $0.kind == "synth" && $0.status == "done" }?.historyID)
     }
+
+    // MARK: Spec 003 — 邊產生邊播、AI 工具直接唸出來
+
+    private func job(_ id: String, status: String, parts: Int = 0, speak: Bool = true, at: Double = 0) throws -> JobView {
+        let done = status == "done" ? #","id":"h-\#(id)","path":"/tmp/out/\#(id).wav""# : ""
+        let json = #"{"job_id":"\#(id)","kind":"synth","status":"\#(status)","progress":0.5,"stage":"產生中","batch":null,"# +
+            #""model":"omnivoice","model_name":"OmniVoice","queued_at":\#(at),"speak":\#(speak),"segments":3,"# +
+            #""parts":\#(parts),"parts_dir":\#(parts > 0 ? "\"/tmp/parts/\(id)\"" : "null"),"# +
+            #""voice_label":"台灣女聲","text":"第一段\n第二段"\#(done)}"#
+        return try StudioClient.decoder.decode(JobView.self, from: Data(json.utf8))
+    }
+
+    func testJobViewLiveFields() throws {
+        let running = try job("a1", status: "running", parts: 2)
+        XCTAssertTrue(running.wantsSpeak)
+        XCTAssertEqual(running.partURLs.map(\.path), ["/tmp/parts/a1/0001.wav", "/tmp/parts/a1/0002.wav"])
+        XCTAssertEqual(running.preview, "第一段 第二段")
+        XCTAssertNil(running.playable, "還沒做完的沒有完整的音檔")
+        XCTAssertTrue(try job("a2", status: "queued").partURLs.isEmpty)
+
+        let done = try XCTUnwrap(try job("a3", status: "done", parts: 3).playable)
+        XCTAssertEqual(done.id, "h-a3")
+        XCTAssertEqual(done.url.path, "/tmp/out/a3.wav")
+        XCTAssertEqual(done.subtitle, "台灣女聲 · OmniVoice")
+
+        // 舊版的服務沒有這些欄位，也要解得出來
+        struct Response: Codable { let jobs: [JobView] }
+        let old = try StudioClient.decoder.decode(Response.self, from: try fixture("jobs-active")).jobs
+        XCTAssertTrue(old.allSatisfy { !$0.wantsSpeak && $0.partURLs.isEmpty })
+        let settings = try StudioClient.decoder.decode(SettingsInfo.self, from: try fixture("settings"))
+        XCTAssertNil(settings.allowSpeak)
+    }
+
+    func testLiveLogicAfterEachPart() {
+        // 下一段已經做好：接著播
+        XCTAssertEqual(LiveLogic.afterPart(0, ready: 2, finished: false, played: 3.2), .playPart(1))
+        // 下一段還沒好：等
+        XCTAssertEqual(LiveLogic.afterPart(1, ready: 2, finished: false, played: 6.0), .wait)
+        // 整份做完：換成完整的音檔，位置是已經播過的長度（就算還有做好沒播的段落）
+        XCTAssertEqual(LiveLogic.afterPart(0, ready: 3, finished: true, played: 3.2), .switchToFinal(offset: 3.2))
+        XCTAssertEqual(LiveLogic.afterPart(2, ready: 3, finished: true, played: 9.5), .switchToFinal(offset: 9.5))
+    }
+
+    func testSpeakQueuePlaysInOrderWithoutInterrupting() throws {
+        var queue = SpeakQueue()
+        // app 剛打開：以前唸過的不重播
+        queue.note([try job("old", status: "done")])
+        XCTAssertEqual(queue.next([try job("old", status: "done")], playerIdle: true), .none)
+
+        // 兩句幾乎同時送來，清單的順序跟送來的順序不一定一樣
+        let first = try job("first", status: "running", at: 10)
+        let second = try job("second", status: "queued", at: 11)
+        let mine = try job("mine", status: "queued", speak: false, at: 12)
+        queue.note([second, mine, first])
+        XCTAssertEqual(queue.pending, ["first", "second"])
+
+        // 第一句還沒有東西可以播：等它，不先播別的
+        XCTAssertEqual(queue.next([first, second], playerIdle: true), .none)
+        let firstDone = try job("first", status: "done", at: 10)
+        // 播放器在忙：不打斷
+        XCTAssertEqual(queue.next([firstDone, second], playerIdle: false), .none)
+        XCTAssertEqual(queue.next([firstDone, second], playerIdle: true), .play(firstDone))
+
+        // 第二句是長稿子：有一段做好就先播
+        let secondLive = try job("second", status: "running", parts: 1, at: 11)
+        XCTAssertEqual(queue.next([firstDone, secondLive], playerIdle: true), .live(secondLive))
+        XCTAssertEqual(queue.next([firstDone, secondLive], playerIdle: true), .none)
+
+        // 失敗、取消的跳過；停止播放會把排著的清掉
+        queue.note([try job("bad", status: "error", at: 20), try job("third", status: "done", at: 21)])
+        let third = try job("third", status: "done", at: 21)
+        XCTAssertEqual(queue.next([try job("bad", status: "error", at: 20), third], playerIdle: true), .play(third))
+        queue.note([try job("fourth", status: "queued", at: 30)])
+        queue.flush()
+        XCTAssertEqual(queue.next([try job("fourth", status: "done", at: 30)], playerIdle: true), .none)
+    }
 }

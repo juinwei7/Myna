@@ -132,12 +132,31 @@ struct JobView: Codable, Identifiable, Hashable {
     let error: String?
     /// 做完之後對應的紀錄代號
     let historyID: String?
+    /// 做完之後成品的路徑
+    let path: String?
+    let queuedAt: Double?
+    /// 做好要直接播出來（AI 工具的 speak）
+    let speak: Bool?
+    /// 稿子總共幾段（開始產生後才有）
+    let segments: Int?
+    /// 已經做好、可以先播的段數；只有一段的稿子不會有
+    let parts: Int?
+    let partsDir: String?
 
     var id: String { jobId }
     var isActive: Bool { status == "queued" || status == "running" }
+    var wantsSpeak: Bool { speak == true }
+
+    /// 已經做好的各段音檔，照順序。檔名是後端定的：`0001.wav`、`0002.wav`…
+    var partURLs: [URL] {
+        guard let partsDir, let parts, parts > 0 else { return [] }
+        let dir = URL(fileURLWithPath: partsDir)
+        return (1...parts).map { dir.appendingPathComponent(String(format: "%04d.wav", $0)) }
+    }
 
     enum CodingKeys: String, CodingKey {
         case jobId, kind, status, progress, stage, batch, model, modelName, voiceLabel, text, error
+        case path, queuedAt, speak, segments, parts, partsDir
         case historyID = "id"
     }
 }
@@ -146,6 +165,8 @@ struct SettingsInfo: Codable, Equatable {
     var defaults: [String: String]
     /// 沒指定聲音時用的那一個（聲音的代號）；nil 是用聲音庫的第一個
     var defaultVoice: String?
+    /// AI 工具能不能讓九官鳥直接播出聲音；舊版的服務沒有這一欄，當成可以
+    var allowSpeak: Bool?
     var memoryBudgetGb: Double
     var memoryBudgetRange: [Double]
 
@@ -176,6 +197,23 @@ struct Playable: Equatable {
 extension HistoryItem {
     var playable: Playable {
         Playable(id: id, url: fileURL, title: preview, subtitle: "\(voiceLabel) · \(modelName)")
+    }
+}
+
+extension JobView {
+    /// 稿子的一行預覽（跟音檔清單同樣的做法）
+    var preview: String {
+        (text ?? "").split(whereSeparator: \.isNewline).joined(separator: " ")
+    }
+
+    var playableSubtitle: String {
+        [voiceLabel, modelName].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// 做完的工作可以直接拿來播（不用先查到它的紀錄）。
+    var playable: Playable? {
+        guard status == "done", let historyID, let path else { return nil }
+        return Playable(id: historyID, url: URL(fileURLWithPath: path), title: preview, subtitle: playableSubtitle)
     }
 }
 

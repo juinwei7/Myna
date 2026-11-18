@@ -102,6 +102,9 @@ final class StudioModel {
     @ObservationIgnored private var tracker = JobTracker()
     @ObservationIgnored private var myJobs = Set<String>()
     @ObservationIgnored private var autoplayJob: String?
+    /// 已經開始邊產生邊播的那一筆（自己送出的）；使用者中途改播別的，就不再幫它自動播
+    @ObservationIgnored private var liveStarted: String?
+    @ObservationIgnored private var speakQueue = SpeakQueue()
     @ObservationIgnored private var pollTask: Task<Void, Never>?
 
     var client: StudioClient { StudioClient(base: supervisor.baseURL) }
@@ -192,6 +195,7 @@ final class StudioModel {
             ffmpeg = (try? await hl)?.ffmpeg ?? true
             jobs = (try? await client.jobs()) ?? jobs
             _ = tracker.update(jobs)
+            speakQueue.note(jobs)
             normalizeChoices()
             loaded = true
         } catch {
@@ -239,7 +243,8 @@ final class StudioModel {
             while !Task.isCancelled {
                 guard let self else { return }
                 await self.tick()
-                try? await Task.sleep(for: .milliseconds(self.isBusy ? 700 : 3000))
+                // 閒置時也不能查太慢：AI 工具要九官鳥唸一句話，是靠這裡發現的
+                try? await Task.sleep(for: .milliseconds(self.isBusy ? 500 : 1000))
             }
         }
     }
@@ -255,6 +260,7 @@ final class StudioModel {
             }
             handle(finished)
         }
+        driveLive(latest)
         if isBusy || section == .models || !finished.isEmpty,
            let m = try? await client.models(), m != models {
             models = m
@@ -266,23 +272,69 @@ final class StudioModel {
     private func handle(_ finished: [JobView]) {
         for job in finished where job.kind == "synth" {
             let mine = myJobs.remove(job.id) != nil
+            let wasLive = player.live?.id == job.id
             switch job.status {
             case "done":
-                if mine, job.id == autoplayJob, let item = item(job.historyID) {
-                    selection = [item.id]
-                    if AppDefaults.flag("autoplay") { player.play(item.playable) } else { player.load(item.playable) }
+                let final = item(job.historyID)?.playable ?? job.playable
+                if wasLive, let final {
+                    // 邊產生邊播的那一筆做完了：換成完整的音檔，接在正在聽的位置
+                    player.feed(id: job.id, parts: job.partURLs, total: job.segments ?? 0)
+                    player.complete(id: job.id, final: final)
+                    if mine { selection = [final.id] }
+                } else if mine, job.id == autoplayJob, liveStarted != job.id, let final {
+                    selection = [final.id]
+                    if AppDefaults.flag("autoplay") { player.play(final) } else { player.load(final) }
                 }
                 if mine { show("完成") }
-                // 人在別的 app 時，讓 Dock 圖示跳一下
-                if NSApp?.isActive == false, AppDefaults.flag("bounceDock") {
+                // 人在別的 app 時，讓 Dock 圖示跳一下；AI 工具要唸的那種會出聲音，不用再跳
+                if !job.wantsSpeak, NSApp?.isActive == false, AppDefaults.flag("bounceDock") {
                     NSApp?.requestUserAttention(.informationalRequest)
                 }
-            case "error" where mine:
-                show(error: "\(job.modelName ?? "")失敗：\(job.error ?? "原因不明")")
+            case "error", "cancelled":
+                // 不會有完整的音檔可以接了，先播的那幾段也停下來
+                if wasLive { player.clear() }
+                if mine, job.status == "error" {
+                    show(error: "\(job.modelName ?? "")失敗：\(job.error ?? "原因不明")")
+                }
             default:
                 break
             }
         }
+    }
+
+    /// 邊產生邊播，以及 AI 工具要九官鳥唸出來的那些工作。每次輪詢跑一次。
+    private func driveLive(_ latest: [JobView]) {
+        // 自己剛送出的那一筆：自動播放開著，第一段做好就開始播
+        if let id = autoplayJob, liveStarted != id, AppDefaults.flag("autoplay"),
+           let job = latest.first(where: { $0.id == id }), job.status == "running", !job.partURLs.isEmpty {
+            liveStarted = id
+            startLive(job)
+        }
+        // 正在邊產生邊播的：把新做好的段落補進去
+        if let live = player.live, let job = latest.first(where: { $0.id == live.id }), job.isActive {
+            player.feed(id: job.id, parts: job.partURLs, total: job.segments ?? 0)
+        }
+        // AI 工具要唸的：照順序，播放器閒著才播下一筆，不打斷正在播的
+        speakQueue.note(latest)
+        switch speakQueue.next(latest, playerIdle: player.isIdle) {
+        case .live(let job):
+            startLive(job)
+        case .play(let job):
+            if let final = item(job.historyID)?.playable ?? job.playable { player.play(final) }
+        case .none:
+            break
+        }
+    }
+
+    private func startLive(_ job: JobView) {
+        player.startLive(id: job.id, title: job.preview, subtitle: job.playableSubtitle,
+                         parts: job.partURLs, total: job.segments ?? 0)
+    }
+
+    /// 停止播放（選單列用）。AI 工具排著還沒唸的也一起取消，不然停了又馬上開口。
+    func stopPlayback() {
+        speakQueue.flush()
+        if player.live != nil { player.clear() } else { player.stop() }
     }
 
     // MARK: 產生
@@ -527,6 +579,10 @@ final class StudioModel {
 
     func setDefault(_ model: ModelInfo, for mode: Mode) async {
         await modelAction { settings = try await client.updateSettings(["defaults": [mode.rawValue: model.id]]) }
+    }
+
+    func setAllowSpeak(_ on: Bool) async {
+        await modelAction { settings = try await client.updateSettings(["allow_speak": on]) }
     }
 
     func setDefaultVoice(_ name: String) async {

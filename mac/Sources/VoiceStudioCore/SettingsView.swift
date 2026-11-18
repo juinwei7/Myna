@@ -49,11 +49,11 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     /// 搜尋用：那一頁項目的名稱，加上常用的說法
     var keywords: [String] {
         switch self {
-        case .generate: ["預設模型", "預設聲音", "仿聲", "配音員", "聲音描述", "自動播放", "完成", "Dock"]
+        case .generate: ["預設模型", "預設聲音", "仿聲", "配音員", "聲音描述", "自動播放", "邊產生邊播", "完成", "Dock"]
         case .pronounce: ["唸錯", "讀音", "寫法", "專有名詞"]
         case .models: ["記憶體上限", "卸載", "載入", "儲存空間", "模型資料夾", "下載", "GB"]
         case .general: ["登入時自動打開", "開機", "資料夾", "資料位置"]
-        case .ai: ["MCP", "Claude", "Claude Code", "位址", "指令", "工具", "synthesize"]
+        case .ai: ["MCP", "Claude", "Claude Code", "位址", "指令", "工具", "synthesize", "speak", "唸出來", "出聲", "通知"]
         case .status: ["語音服務", "重新啟動", "紀錄檔", "ffmpeg", "語速", "版本", "環境檢查"]
         }
     }
@@ -198,9 +198,13 @@ struct GenerateSettings: View {
                 Text("AI 工具沒有指定聲音時用這一個。")
             }
 
-            Section("產生完成後") {
+            Section {
                 Toggle("自動播放", isOn: $autoplay)
                 Toggle("九官鳥在背景時，讓 Dock 圖示跳一下", isOn: $bounceDock)
+            } header: {
+                Text("產生完成後")
+            } footer: {
+                Text("稿子有兩段以上時，自動播放會從第一段做好就開始播，不用等整份做完。")
             }
         }
         .formStyle(.grouped)
@@ -415,6 +419,7 @@ struct AIToolSettings: View {
         ("list_voices", "列出可用的聲音"),
         ("list_models", "列出已下載的模型與能力"),
         ("synthesize", "把文字唸成音檔，可以指定聲音與模型"),
+        ("speak", "把文字直接從這台 Mac 唸出來"),
         ("get_job", "查產生的進度、取回結果"),
         ("add_voice", "用一段錄音新增仿聲的聲音"),
         ("list_recent", "最近產生的音檔"),
@@ -447,6 +452,14 @@ struct AIToolSettings: View {
                 Text("加到 Claude Code")
             } footer: {
                 Text("在終端機貼上這一行，重開 Claude Code 後就能叫它用九官鳥唸稿。其他支援 MCP 的工具，把上面的位址填進它的設定。")
+            }
+
+            Section {
+                Toggle("讓 AI 工具直接唸出來", isOn: Binding(
+                    get: { model.settings?.allowSpeak ?? true },
+                    set: { on in Task { await model.setAllowSpeak(on) } }))
+            } footer: {
+                Text("打開時，AI 工具可以叫九官鳥把一句話直接播出來，例如事情做完通知你一聲。唸過的內容會留在「音檔」。關掉之後 AI 工具還是能產生音檔，只是不會自己出聲。")
             }
 
             Section("AI 工具能做的事") {

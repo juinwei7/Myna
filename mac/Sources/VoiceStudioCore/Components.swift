@@ -177,6 +177,30 @@ struct WaveformView: View {
 }
 
 /// 底部播放列：播放、目前時間、波形、總長、倍速。
+/// 邊產生邊播時的進度條：深色是播過的、淺色是做好還沒播的、底色是還沒做的。
+struct LiveProgressView: View {
+    /// 播到哪了（0～1）
+    let played: Double
+    /// 做到哪了（0～1）
+    let ready: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.primary.opacity(0.08))
+                Capsule().fill(Color.primary.opacity(0.22))
+                    .frame(width: geo.size.width * min(max(ready, 0), 1))
+                Capsule().fill(Color.persimmon)
+                    .frame(width: geo.size.width * min(max(played, 0), 1))
+            }
+            .frame(height: 6)
+            .frame(maxHeight: .infinity, alignment: .center)
+            .animation(.linear(duration: 0.1), value: played)
+            .animation(.easeOut(duration: 0.3), value: ready)
+        }
+    }
+}
+
 struct PlayerBar: View {
     @Environment(StudioModel.self) private var model
 
@@ -203,25 +227,40 @@ struct PlayerBar: View {
                 }
                 .frame(width: 170, alignment: .leading)
                 .contentShape(Rectangle())
-                // 只有標題這塊能把檔案拖出去；波形上的拖曳留給跳轉
-                .onDrag { NSItemProvider(contentsOf: item.url) ?? NSItemProvider() }
-                .help("可以把音檔拖到別的地方")
+                // 只有標題這塊能把檔案拖出去；波形上的拖曳留給跳轉。還在產生的沒有完整的檔可以拖
+                .onDrag { player.live == nil ? NSItemProvider(contentsOf: item.url) ?? NSItemProvider() : NSItemProvider() }
+                .help(player.live == nil ? "可以把音檔拖到別的地方" : "還在產生，做完才有完整的音檔")
 
                 Text(Formatting.clock(player.position))
                     .font(.callout.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .frame(width: 40, alignment: .trailing)
 
-                WaveformView(peaks: player.peaks,
-                             progress: player.duration > 0 ? player.position / player.duration : 0) {
-                    player.seek($0 * player.duration)
-                }
-                .frame(height: 30)
+                if let live = player.live {
+                    // 邊產生邊播：後面的還不存在，沒有波形可以畫，改畫做到哪、播到哪
+                    LiveProgressView(played: player.liveProgress,
+                                     ready: Double(live.parts.count) / Double(max(live.total, 1)))
+                        .frame(height: 30)
+                        .accessibilityLabel("已經做好 \(live.parts.count) 段，共 \(live.total) 段")
 
-                Text(Formatting.clock(player.duration))
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .frame(width: 40, alignment: .leading)
+                    // 寫的是播到第幾段；做到第幾段看進度條淺色的部分，佇列那一列也有
+                    Text(live.waiting ? "等下一段…" : "第 \(live.index + 1)／\(live.total) 段")
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .frame(width: 84, alignment: .leading)
+                        .help("還在產生：已經做好 \(live.parts.count) 段，共 \(live.total) 段。整份做完就會出現波形，可以拖曳跳轉")
+                } else {
+                    WaveformView(peaks: player.peaks,
+                                 progress: player.duration > 0 ? player.position / player.duration : 0) {
+                        player.seek($0 * player.duration)
+                    }
+                    .frame(height: 30)
+
+                    Text(Formatting.clock(player.duration))
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .frame(width: 40, alignment: .leading)
+                }
 
                 Menu {
                     ForEach(Player.rates, id: \.self) { value in
