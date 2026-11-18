@@ -1,7 +1,7 @@
-# 九官鳥官網：需求與設計
+# 九官鳥官網：需求與設計（已上線 https://myna.weibuilds.com）
 
-還沒上線。預定網址 `https://myna.weibuilds.com`，repo 預定 `github.com/juinwei7/Myna`；
-兩個都只寫在一個地方（`site/build.mjs` 的 `SITE_URL` 預設值、`site/src/releases.mjs` 的 `REPO`），要改很快。
+repo 是 `github.com/juinwei7/Myna`。網址和 repo 名稱各只寫在一個地方
+（`site/build.mjs` 的 `SITE_URL` 預設值、`site/src/releases.mjs` 的 `REPO`）。
 
 ## 1. 需求
 
@@ -93,12 +93,24 @@
 
 ## 6. 部署
 
-`.github/workflows/site.yml`：推到 main 改到網站或截圖、發布新版、或手動執行時建置，
-有設定 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` 才部署到 Cloudflare Pages（專案名稱預設 `myna`）。
+Cloudflare Pages 的專案叫 `myna`（直接上傳的專案，Cloudflare 給的網址是 `myna-1ar.pages.dev`），
+自訂網域 `myna.weibuilds.com` 是一筆指到它的 CNAME。`*.pages.dev` 的網址帶 `X-Robots-Tag: noindex`，不讓搜尋引擎收。
 
-上線前要做的：
+`.github/workflows/site.yml`：推到 main 改到網站或截圖、發布新版、或手動執行時建置；
+有設定 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` 才部署，沒有就只建置。
 
-1. 在 GitHub 建 repo、推上去；名稱不是 `juinwei7/Myna` 的話改 `site/src/releases.mjs`、README、`.github/README.md`
-2. 在 repo 設定 Cloudflare 的兩個 secret
-3. 在 Cloudflare 把網域接到 Pages 專案；網址不是 `myna.weibuilds.com` 的話設 `vars.MYNA_SITE_URL`
-4. 發布第一個版本（`cd mac && make dmg`，把 `dist/Myna-<版本>.dmg` 掛在 Release 上），下載按鈕才會出現
+現況（2026-11-18）：
+
+- 第一次上線是在 Cloudflare 後台手動上傳 `site/dist` 的壓縮檔。
+- `CLOUDFLARE_ACCOUNT_ID` 已經設好；`CLOUDFLARE_API_TOKEN` **還沒設**，所以推上 main 或發布新版時網站還不會自動更新。
+  設好之後（權限要有「帳戶 → Cloudflare Pages → 編輯」）手動跑一次「官網」流程確認。
+- 在 token 設好之前要更新網站：`node site/build.mjs`，把 `site/dist` 壓成 zip，
+  到 Cloudflare 後台的 Pages 專案 `myna` →「建立部署」上傳。
+
+驗證線上的網站：
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://myna.weibuilds.com/            # 200
+curl -s -o /dev/null -w '%{http_code}\n' https://myna.weibuilds.com/changelog/  # 200
+curl -s -o /dev/null -w '%{redirect_url}\n' https://myna.weibuilds.com/download # 最新版的 DMG
+```

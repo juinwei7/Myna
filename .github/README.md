@@ -1,6 +1,6 @@
 <img src="../docs/images/icon.png" width="96" alt="Myna icon">
 
-[繁體中文](../README.md) | **English**
+[繁體中文](../README.md) | **English** | Website: [myna.weibuilds.com](https://myna.weibuilds.com) (Chinese)
 
 # Myna (九官鳥)
 

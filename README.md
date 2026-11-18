@@ -1,6 +1,6 @@
 <img src="docs/images/icon.png" width="96" alt="九官鳥圖示">
 
-**繁體中文** | [English](.github/README.md)
+**繁體中文** | [English](.github/README.md) | 官網：[myna.weibuilds.com](https://myna.weibuilds.com)
 
 # 九官鳥 Myna
 

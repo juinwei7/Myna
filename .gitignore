@@ -1,14 +1,15 @@
 # 個人資料與最早的命令列工具：只留在本機
 legacy/
 
-# 聲音、音檔、設定一律放 VOICE_STUDIO_HOME（~/Library/Application Support/VoiceStudio），這裡保險起見再擋一次
+# 聲音、音檔、設定一律放 VOICE_STUDIO_HOME（~/Library/Application Support/VoiceStudio），這裡保險起見再擋一次。
+# 資料夾和設定檔只擋根目錄的（開頭的 / ）：測試的樣本裡有同名的 settings.json，不能一起擋掉
 *.wav
 *.m4a
 *.mp3
-voices/
-out/
-settings.json
-pronounce.txt
+/voices/
+/out/
+/settings.json
+/pronounce.txt
 
 # Python
 .venv/
