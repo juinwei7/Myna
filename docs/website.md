@@ -102,10 +102,10 @@ Cloudflare Pages 的專案叫 `myna`（直接上傳的專案，Cloudflare 給的
 現況（2026-11-18）：
 
 - 第一次上線是在 Cloudflare 後台手動上傳 `site/dist` 的壓縮檔。
-- `CLOUDFLARE_ACCOUNT_ID` 已經設好；`CLOUDFLARE_API_TOKEN` **還沒設**，所以推上 main 或發布新版時網站還不會自動更新。
-  設好之後（權限要有「帳戶 → Cloudflare Pages → 編輯」）手動跑一次「官網」流程確認。
-- 在 token 設好之前要更新網站：`node site/build.mjs`，把 `site/dist` 壓成 zip，
-  到 Cloudflare 後台的 Pages 專案 `myna` →「建立部署」上傳。
+- `CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_API_TOKEN` 都設好了（token 的權限只有「帳戶 → Cloudflare Pages → 編輯」），
+  手動跑過一次「官網」流程，部署成功。之後推上 main 改到網站、或發布新版，網站會自己更新。
+- token 失效時流程會在部署那一步失敗。到 Cloudflare 重建一把同樣權限的 token，更新 repo 的 secret 就好；
+  急著更新可以 `node site/build.mjs`，把 `site/dist` 壓成 zip，到 Cloudflare 後台的 Pages 專案 `myna` →「建立部署」上傳。
 
 驗證線上的網站：
 
