@@ -1,12 +1,28 @@
 // 首頁、版本說明、404 的 HTML（docs/website.md §3）。整個網站沒有 JavaScript，深色模式跟著系統。
 
-import { content as c, MODELS, GITHUB } from './content.mjs';
+import { content as c, MODELS, SAMPLES, GITHUB } from './content.mjs';
 
 export function escape(text) {
   return String(text).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 }
 
-const paragraphs = (ps) => ps.map((p) => `<p>${escape(p)}</p>`).join('\n');
+// 版本比大小：'2.10.0' 比 '2.9.0' 新，所以不能直接比字串
+export function atLeast(version, since) {
+  const [a, b] = [version, since].map((v) => String(v ?? '').split('.').map((n) => parseInt(n, 10) || 0));
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0);
+  }
+  return true;
+}
+
+// 標了 since 的段落，最新發布的版本到了才放（還沒有任何發布時都不放）
+export function released(items, version) {
+  return items
+    .filter((p) => typeof p === 'string' || (version && atLeast(version, p.since)))
+    .map((p) => (typeof p === 'string' ? p : p.text));
+}
+
+const paragraphs = (ps, version) => released(ps, version).map((p) => `<p>${escape(p)}</p>`).join('\n');
 const list = (items) => `<ul>${items.map((i) => `<li>${escape(i)}</li>`).join('')}</ul>`;
 
 // 共用的外框：head、頁首、頁尾。path 是這一頁的網址（404 頁沒有，不放 canonical）
@@ -79,6 +95,23 @@ function modelsTable() {
   return `<div class="scroll"><table class="models"><thead><tr>${head}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 }
 
+// 試聽：同一句話每個模型各唸一次。不預先載入，按了才抓；沒有 script，用瀏覽器自己的播放器
+function samplesBlock() {
+  const g = c.compare.samples;
+  const rows = SAMPLES.map((s) => `<li>
+      <div><strong>${escape(s.name)}</strong><span>${escape(s.how)}</span></div>
+      <audio controls preload="none" src="/audio/${s.id}.m4a" aria-label="${escape(g.play(s.name))}"><a href="/audio/${s.id}.m4a">${escape(g.fallback)}</a></audio>
+    </li>`);
+  return `<div class="col" id="samples">
+    <h3>${escape(g.heading)}</h3>
+    <p>${escape(g.text(g.sentence))}</p>
+    <ul class="samples">
+    ${rows.join('\n    ')}
+    </ul>
+    <p class="note">${escape(g.note)}</p>
+  </div>`;
+}
+
 function downloadSection(latest) {
   const d = c.download;
   const req = d.requirements.map(([k, v]) => `<div><dt>${k}</dt><dd>${escape(v)}</dd></div>`).join('');
@@ -121,6 +154,7 @@ function schema(site, latest) {
 
 export function homePage({ site, css, releases }) {
   const latest = releases[0] ?? null;
+  const version = latest?.version;
   const body = `<section class="intro">
   <img src="/icon.png" alt="" width="96" height="96">
   <h1>${escape(c.intro.heading)}</h1>
@@ -135,7 +169,7 @@ ${shot('studio', { first: true })}
 
 <section class="part col" id="features">
   <h2>${escape(c.features.heading)}</h2>
-  ${paragraphs(c.features.paragraphs)}
+  ${paragraphs(c.features.paragraphs, version)}
 </section>
 
 <section class="part">
@@ -153,6 +187,7 @@ ${shot('studio', { first: true })}
     ${paragraphs(c.compare.paragraphs)}
   </div>
   ${shot('versions')}
+  ${samplesBlock()}
 </section>
 
 <section class="part" id="models">
@@ -181,7 +216,7 @@ ${shot('studio', { first: true })}
   <h2>${escape(c.mcp.heading)}</h2>
   ${paragraphs(c.mcp.paragraphs)}
   <pre><code>${escape(c.mcp.command)}</code></pre>
-  <p>${escape(c.mcp.after)}</p>
+  ${paragraphs(c.mcp.after, version)}
 </section>
 
 ${downloadSection(latest)}

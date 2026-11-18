@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), 'dist');
 const port = Number(process.env.PORT || 4322);
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.png': 'image/png', '.avif': 'image/avif', '.ico': 'image/x-icon',
-  '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml' };
+  '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.m4a': 'audio/mp4' };
 
 const redirects = await readFile(path.join(root, '_redirects'), 'utf8')
   .then((text) => Object.fromEntries(text.trim().split('\n').map((line) => line.split(/\s+/).slice(0, 2))))

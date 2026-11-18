@@ -81,6 +81,19 @@ figure { margin: 0; }
 .models .num { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .scroll { overflow-x: auto; }
 
+/* 試聽：一列一個模型，左邊是名稱和做法，右邊是播放器 */
+.part #samples { margin-top: 36px; }
+.part #samples h3 { margin-top: 0; }
+.samples { list-style: none; margin: 16px 0 0; padding: 0; border-top: 1px solid var(--line); }
+.part .samples { padding-left: 0; }
+.samples li { display: flex; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.part .samples li + li { margin-top: 0; }
+.samples div { flex: 1; min-width: 0; }
+.samples strong { display: block; font-size: 16px; font-weight: 600; }
+.samples span { display: block; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.samples audio { flex: none; width: 280px; height: 36px; }
+.samples + .note { margin-top: 12px; }
+
 /* 指令 */
 pre { margin: 14px 0 0; padding: 14px 16px; border-radius: 10px; background: var(--soft); font: 14px/1.6 var(--mono); overflow-x: auto; }
 code { font-family: var(--mono); font-size: .9em; }
@@ -120,4 +133,6 @@ footer span { margin-right: auto; }
   .intro p { font-size: 17px; }
   .two { grid-template-columns: 1fr; gap: 16px; }
   .part { padding-top: 56px; }
+  .samples li { flex-direction: column; align-items: stretch; gap: 8px; }
+  .samples audio { width: 100%; }
 }

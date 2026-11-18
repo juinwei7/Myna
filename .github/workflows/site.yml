@@ -47,6 +47,7 @@ jobs:
           SITE_URL: ${{ vars.MYNA_SITE_URL }}
         run: |
           node --version
+          node --test site/src/pages.test.mjs
           node site/build.mjs
 
       - name: 部署到 Cloudflare Pages

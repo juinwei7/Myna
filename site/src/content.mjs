@@ -16,6 +16,23 @@ export const MODELS = [
   { name: 'MOSS-TTS Nano', modes: '仿聲', size: '0.4 GB', license: 'Apache-2.0', cer: '8%', note: '最小，適合試稿，不適合當成品' },
 ];
 
+// 試聽的音檔（site/public/audio/<代號>.m4a）是 site/make-samples.py 產生的；句子、聲音描述、做法要跟那支程式一致。
+// 順序跟上面的表一樣。
+const DESIGNED = '聲音描述：「三十歲左右的台灣女性，聲音溫暖親切」';
+const CLONED = '仿聲：參考錄音是 VoxCPM2 用聲音描述產生的另一段話';
+export const SAMPLES = [
+  { id: 'qwen3-1.7b-base', name: 'Qwen3-TTS 1.7B 仿聲', how: CLONED },
+  { id: 'qwen3-1.7b-custom', name: 'Qwen3-TTS 1.7B 配音員', how: '配音員 Vivian，語氣：「像在跟朋友聊天，輕鬆自然」' },
+  { id: 'qwen3-1.7b-design', name: 'Qwen3-TTS 1.7B 聲音描述', how: DESIGNED },
+  { id: 'qwen3-0.6b-base', name: 'Qwen3-TTS 0.6B 仿聲', how: CLONED },
+  { id: 'breeze-tts-2', name: 'Breeze-TTS 2', how: DESIGNED },
+  { id: 'voxcpm2', name: 'VoxCPM2', how: DESIGNED },
+  { id: 'omnivoice', name: 'OmniVoice', how: '聲音描述：「女性，青年，中音」' },
+  { id: 'moss-tts-nano', name: 'MOSS-TTS Nano', how: CLONED },
+];
+
+// 段落可以寫成 { since: '2.1.0', text: '…' }：最新發布的版本到了那一版才放上網站。
+// 網站在推上 main 時就會部署，這樣文案不會寫到還沒發布的功能。
 export const content = {
   name: '九官鳥',
   fullName: '九官鳥 Myna',
@@ -39,6 +56,7 @@ export const content = {
     heading: '寫稿子，選聲音，按一下',
     paragraphs: [
       '稿子寫在中間。換行會分段唸，空一行會停久一點。按 ⌘↩ 就開始產生，做完自動播放。',
+      { since: '2.1.0', text: '稿子長的時候不用等整份做完：第一段做好就開始播，後面的做好就接上去。' },
       '聲音有三種來源，在工具列中間切換。「仿聲」照你錄的參考錄音唸；「配音員」是模型內建的聲音，可以加一句語氣，像「親切、清楚的車站廣播」；「聲音描述」是用文字形容，像「三十歲左右的台灣女性，聲音溫暖親切」。',
       '做好的音檔可以直接拖到 Finder、剪輯軟體或聊天視窗。',
     ],
@@ -58,6 +76,14 @@ export const content = {
       '同一個聲音、同一份稿子，換一個模型唸出來的味道就不一樣。打開「比較模型」勾幾個，同一份稿子會各產生一次。',
       '做完的版本排在稿子下面，標著是哪個模型、多長，點一下就播。稿子沒改，之前試過的版本都會留在這一排。',
     ],
+    samples: {
+      heading: '先聽聽看',
+      sentence: '今天天氣還不錯，我想跟大家分享最近在做的一件事。',
+      text: (sentence) => `下面是同一句話，8 個模型各唸一次：「${sentence}」`,
+      note: '這裡沒有用任何真人的聲音。模型每次產生的結果會有一點不一樣，放的是其中一次。',
+      play: (name) => `${name} 唸的這一句`,
+      fallback: '下載這段音檔',
+    },
   },
   models: {
     heading: '8 個模型，要用哪個自己挑',
@@ -81,7 +107,10 @@ export const content = {
       '九官鳥開著的時候，支援 MCP 的 AI 工具可以直接叫它產生語音。Claude Code 在終端機加這一行：',
     ],
     command: 'claude mcp add --transport http myna http://localhost:8790/mcp',
-    after: '之後就能跟 Claude 說「把這段公告唸成音檔」。它送來的工作會出現在九官鳥的佇列，做完的音檔也留在 app 裡。這個位址只有這台 Mac 自己連得到。',
+    after: [
+      '之後就能跟 Claude 說「把這段公告唸成音檔」。它送來的工作會出現在九官鳥的佇列，做完的音檔也留在 app 裡。這個位址只有這台 Mac 自己連得到。',
+      { since: '2.1.0', text: '也可以讓它直接開口：跟 Claude 說「做完跟我說一聲」，它會用你設定的聲音，從這台 Mac 把話唸出來。不想被打擾的時候，在設定裡關掉就好。' },
+    ],
   },
   download: {
     heading: '下載',

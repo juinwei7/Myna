@@ -6,6 +6,8 @@ legacy/
 *.wav
 *.m4a
 *.mp3
+# 例外：官網的試聽（site/make-samples.py 用聲音描述與內建配音員產生，沒有真人的聲音）
+!/site/public/audio/*.m4a
 /voices/
 /out/
 /settings.json

@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { loadReleases } from './src/releases.mjs';
 import { homePage, changelogPage, notFoundPage, llmsTxt, SHOT_SIZE } from './src/pages.mjs';
+import { SAMPLES } from './src/content.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '..');
@@ -41,6 +42,12 @@ try {
         throw new Error(`缺 site/public/images/${name}${suffix}.avif，先跑 site/make-images.sh`);
       });
     }
+  }
+  // 試聽的音檔要用真的模型產生，CI 做不出來，所以是放進 git 的；少了就停下來
+  for (const sample of SAMPLES) {
+    await stat(path.join(here, `public/audio/${sample.id}.m4a`)).catch(() => {
+      throw new Error(`缺 site/public/audio/${sample.id}.m4a，先跑 site/make-samples.py`);
+    });
   }
   const css = await readFile(path.join(here, 'src/style.css'), 'utf8');
 
