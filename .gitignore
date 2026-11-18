@@ -31,3 +31,6 @@ site/dist/
 # 給 AI 的專案說明、Claude Code 的本機設定：只留在本地，不推
 CLAUDE.md
 .claude/
+
+# 給使用者跑一次就自己刪掉的腳本
+*-once.sh
